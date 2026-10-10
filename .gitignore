@@ -1,0 +1,5 @@
+# MinGit and temp tools
+mingit/
+mingit.zip
+*.pyc
+__pycache__/

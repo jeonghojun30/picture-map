@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PhotoMap GPS - 사진 지도</title>
+
+  <!-- Pretendard Font -->
+  <link rel="stylesheet" as="style" crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+
+  <!-- Leaflet CSS & MarkerCluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+  <!-- Custom Style -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <div id="app-container">
+    <!-- Leaflet Map Container -->
+    <div id="map"></div>
+
+    <!-- Top Navigation Bar -->
+    <header class="top-nav">
+      <!-- Brand & Info -->
+      <div class="brand-badge">
+        <div class="brand-icon">
+          <i data-lucide="map-pinned"></i>
+        </div>
+        <div class="brand-info">
+          <h1>PhotoMap GPS <span class="realestate-tag">실거래가 스타일 뷰</span></h1>
+          <p>EXIF 위치 메타데이터 기반 사진 탐색 및 다운로드</p>
+        </div>
+      </div>
+
+      <!-- Controls (Upload, Folder, GitHub Export, ZIP Download, Reset) -->
+      <div class="control-hub">
+        <label for="file-input" class="btn btn-primary" title="사진 파일들을 선택하거나 지도로 직접 드래그하세요">
+          <i data-lucide="image-plus"></i>
+          <span>사진 추가</span>
+        </label>
+        <input type="file" id="file-input" multiple accept="image/jpeg,image/png,image/webp,image/heic"
+          style="display: none;" />
+
+        <label for="folder-input" class="btn" title="특정 폴더 안의 모든 사진들을 한 번에 불러옵니다">
+          <i data-lucide="folder-up"></i>
+          <span>폴더 불러오기</span>
+        </label>
+        <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;" />
+
+        <button class="btn" onclick="exportSampleDataJs()"
+          title="현재 사진 목록을 sample-data.js 파일로 다운로드하여 깃허브에 덮어쓰기하면 모든 사용자에게 반영됩니다!">
+          <i data-lucide="github"></i>
+          <span>깃허브 반영 저장</span>
+        </button>
+
+        <button class="btn btn-accent" onclick="downloadAllPhotosZip()" title="지도에 등록된 모든 사진과 GPS 메타데이터를 ZIP으로 다운로드">
+          <i data-lucide="archive"></i>
+          <span>ZIP 다운로드</span>
+        </button>
+
+        <button class="btn" onclick="resetToSampleData()" title="기본 샘플 사진 세트로 복원">
+          <i data-lucide="rotate-ccw"></i>
+          <span>샘플 복원</span>
+        </button>
+
+        <button class="btn btn-icon-only" onclick="clearAllPhotos()" title="등록된 모든 사진 일괄 삭제" style="color:#f87171;">
+          <i data-lucide="trash-2"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Floating Map Style Switcher -->
+    <div class="map-style-bar">
+      <button class="style-tab active" data-style="vworld_base" title="국토교통부 공간정보 오픈플랫폼 공공 도로명 지도">VWorld 공공지도</button>
+      <button class="style-tab" data-style="vworld_satellite" title="국토교통부 고해상도 항공 위성 + 한글 도로명/건물명 하이브리드">VWorld 위성뷰 🛰️</button>
+      <button class="style-tab" data-style="osm_detailed" title="최신 도로명, 건물명, 지하철역, POI 상세 표기">상세 도로명·건물명</button>
+      <button class="style-tab" data-style="satellite_hybrid" title="글로벌 위성 영상과 도로명/건물명 라벨 하이브리드">글로벌 위성</button>
+      <button class="style-tab" data-style="voyager" title="깔끔하고 모던한 도시 지도">모던 시티</button>
+      <button class="style-tab" data-style="dark" title="세련된 야간 다크 모드">다크 지도</button>
+    </div>
+
+    <!-- Stats Floating Bar (Bottom Left) -->
+    <div class="stats-floating-bar">
+      <div class="stat-item">
+        <i data-lucide="images" style="width:15px;height:15px;color:var(--primary);"></i>
+        <span>등록된 사진 <span id="total-photos-count" class="stat-value">0</span>장</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <i data-lucide="eye" style="width:15px;height:15px;color:var(--success);"></i>
+        <span>현재 화면 <span id="visible-photo-count" class="stat-value">0</span>장</span>
+      </div>
+    </div>
+
+    <!-- Side Gallery Drawer (Collapsible) -->
+    <aside id="side-drawer" class="side-drawer">
+      <div class="drawer-header">
+        <div class="drawer-title-group">
+          <h2>현재 구역 사진 목록</h2>
+          <p>지도를 이동하면 화면 내 사진이 자동 갱신됩니다</p>
+        </div>
+        <button id="drawer-close-btn" class="drawer-close-btn" title="목록 접기">
+          <i data-lucide="chevron-right"></i>
+        </button>
+      </div>
+
+      <div class="drawer-filter-bar">
+        <div class="search-input-wrap">
+          <i data-lucide="search" class="search-icon"></i>
+          <input type="text" id="search-input" placeholder="사진 이름 또는 위치 검색..." />
+        </div>
+        <div class="drawer-sort-bar">
+          <span class="sort-label"><i data-lucide="arrow-up-down" style="width:13px;height:13px;"></i> 정렬:</span>
+          <select id="sort-select" class="sort-select">
+            <option value="name-asc">사진 이름 오름차순 (A → Z, 1 → 9)</option>
+            <option value="name-desc">사진 이름 내림차순 (Z → A, 9 → 1)</option>
+            <option value="date-desc">최신 촬영일시순</option>
+            <option value="date-asc">과거 촬영일시순</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="drawer-gallery-list" class="drawer-content">
+        <!-- 동적으로 사진 카드 렌더링 -->
+      </div>
+    </aside>
+
+    <!-- Drawer Toggle Floating Button -->
+    <button id="drawer-toggle-btn" class="btn btn-icon-only drawer-toggle-btn" style="display:none;" title="사진 목록 열기">
+      <i data-lucide="layers"></i>
+    </button>
+
+    <!-- Fullscreen Modal / Lightbox -->
+    <div id="photo-modal" class="modal-overlay">
+      <div class="modal-dialog">
+        <button class="modal-close-btn" onclick="closePhotoModal()" title="닫기 (ESC)">
+          <i data-lucide="x"></i>
+        </button>
+
+        <div class="modal-img-container">
+          <button class="modal-nav-btn prev" onclick="prevModalPhoto()" title="이전 사진 (←)">
+            <i data-lucide="chevron-left"></i>
+          </button>
+          <img id="modal-img" class="modal-main-img" src="" alt="Photo Preview" />
+          <button class="modal-nav-btn next" onclick="nextModalPhoto()" title="다음 사진 (→)">
+            <i data-lucide="chevron-right"></i>
+          </button>
+        </div>
+
+        <div class="modal-side-panel">
+          <div class="modal-title-row">
+            <h2 id="modal-photo-name" class="modal-photo-name">사진 이름</h2>
+            <div class="modal-photo-location">
+              <i data-lucide="map-pin" style="width:14px;height:14px;"></i>
+              <span id="modal-location-text">위치 정보</span>
+            </div>
+          </div>
+
+          <div class="exif-card">
+            <div class="exif-card-title">
+              <i data-lucide="camera" style="width:14px;height:14px;"></i>
+              <span>EXIF 촬영 정보</span>
+            </div>
+            <div class="exif-grid">
+              <div class="exif-item">
+                <span class="exif-label">촬영 일시</span>
+                <span id="modal-exif-date" class="exif-val">-</span>
+              </div>
+              <div class="exif-item">
+                <span class="exif-label">카메라 모델</span>
+                <span id="modal-exif-camera" class="exif-val">-</span>
+              </div>
+              <div class="exif-item">
+                <span class="exif-label">초점 거리</span>
+                <span id="modal-exif-focal" class="exif-val">-</span>
+              </div>
+              <div class="exif-item">
+                <span class="exif-label">조리개</span>
+                <span id="modal-exif-aperture" class="exif-val">-</span>
+              </div>
+              <div class="exif-item">
+                <span class="exif-label">ISO</span>
+                <span id="modal-exif-iso" class="exif-val">-</span>
+              </div>
+              <div class="exif-item">
+                <span class="exif-label">셔터 스피드</span>
+                <span id="modal-exif-shutter" class="exif-val">-</span>
+              </div>
+              <div class="exif-item">
+                <span class="exif-label">GPS 좌표</span>
+                <span id="modal-exif-gps" class="exif-val">-</span>
+              </div>
+              <div class="exif-item">
+                <span class="exif-label">파일 크기</span>
+                <span id="modal-exif-size" class="exif-val">-</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn btn-primary" onclick="downloadCurrentModalPhoto()"
+              style="width:100%;justify-content:center;">
+              <i data-lucide="download"></i>
+              <span>고화질 원본 다운로드</span>
+            </button>
+            <button class="btn" onclick="copyGpsToClipboard()" style="width:100%;justify-content:center;">
+              <i data-lucide="copy"></i>
+              <span>GPS 좌표 복사</span>
+            </button>
+            <button class="btn btn-danger" onclick="deleteCurrentModalPhoto()"
+              style="width:100%;justify-content:center;">
+              <i data-lucide="trash-2"></i>
+              <span>이 사진 삭제</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Drag & Drop Upload Overlay -->
+    <div id="drop-overlay" class="drop-overlay">
+      <div class="drop-icon-box">
+        <i data-lucide="upload-cloud"></i>
+      </div>
+      <div class="drop-text-main">사진 파일들을 여기에 드롭하세요!</div>
+      <div class="drop-text-sub">JPG, PNG 파일 내 EXIF GPS 위치를 자동으로 추출하여 지도에 배치합니다.</div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <!-- External Libraries -->
+  <!-- 1. Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- 2. Leaflet MarkerCluster -->
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <!-- 3. exifr (High performance EXIF Parser) -->
+  <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
+  <!-- 4. JSZip for batch download -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- 5. Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Application Logic -->
+  <script src="sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>
